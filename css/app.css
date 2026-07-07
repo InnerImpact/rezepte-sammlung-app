@@ -313,6 +313,7 @@ a { color: var(--accent-dark); text-decoration: none; }
 .btn.primary:active { background: var(--accent-dark); }
 .btn.secondary { background: var(--surface); color: var(--text); }
 .btn.secondary:active { background: var(--surface-2); }
+.btn:disabled { opacity: 0.4; }
 
 /* ---------- Platzhalter-Seiten ---------- */
 .placeholder-page { padding-top: 8px; }
@@ -389,3 +390,66 @@ input[type="file"].field { padding: 10px 12px; font-size: 15px; }
 }
 .status-list li:last-child { border-bottom: none; }
 .status-list span { color: var(--text-2); }
+
+/* ---------- Hinzufügen: Auswahl ---------- */
+.choose-list { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; }
+.choose-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  text-align: left;
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+.choose-card:active { background: var(--surface-2); }
+.choose-card:disabled { opacity: 0.45; }
+.choose-ic {
+  width: 46px;
+  height: 46px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.choose-ic .icon { width: 24px; height: 24px; }
+.choose-txt { flex: 1; min-width: 0; }
+.choose-txt strong { display: block; font-size: 17px; font-weight: 600; }
+.choose-txt small { display: block; font-size: 14px; color: var(--text-2); margin-top: 2px; line-height: 1.35; }
+.choose-arrow { width: 20px; height: 20px; color: var(--text-3); flex-shrink: 0; }
+
+/* ---------- Foto-Feld ---------- */
+.photo-drop {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 220px;
+  border: 2px dashed var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text-3);
+  text-align: center;
+  font-size: 15px;
+  padding: 20px;
+  overflow: hidden;
+  cursor: pointer;
+}
+.photo-drop .icon { width: 40px; height: 40px; stroke-width: 1.4; }
+.photo-drop img { width: 100%; border-radius: 12px; display: block; }
+
+/* ---------- Warteschlangen-Kacheln ---------- */
+.queue-grid { margin-bottom: 18px; }
+.queue-tile .img-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-soft);
+}
+.queue-ic { color: var(--accent); animation: pulse 1.4s ease-in-out infinite; }
+.queue-ic .icon { width: 34px; height: 34px; }
+.queue-tile h3 { color: var(--text-2); }

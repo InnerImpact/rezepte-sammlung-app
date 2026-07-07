@@ -2,8 +2,9 @@ import {
   loadRecipes, imageUrl, collectTags, saveRecipe,
   isDemoMode, inboxCount, pendingCount, lastSyncTime, flushPending,
   addToIndex, makeId, uploadImage,
-} from './data.js?v=3';
-import { getConfig, saveConfig, testConnection } from './github.js?v=3';
+  listInbox, addLinkJob, addPhotoJob,
+} from './data.js?v=4';
+import { getConfig, saveConfig, testConnection } from './github.js?v=4';
 
 const app = document.getElementById('app');
 
@@ -17,6 +18,7 @@ const state = {
   fromCache: false,
   error: null,
   inbox: 0,
+  inboxJobs: [],
 };
 
 function icon(name, cls = 'icon') {
@@ -59,11 +61,14 @@ async function refresh() {
     state.recipes = [];
   }
   state.loaded = true;
-  inboxCount().then((n) => {
-    if (n !== state.inbox) {
-      state.inbox = n;
+  listInbox().then((jobs) => {
+    state.inboxJobs = jobs;
+    if (jobs.length !== state.inbox) {
+      state.inbox = jobs.length;
       const el = document.getElementById('inbox-banner-slot');
       if (el) el.innerHTML = inboxBannerHtml();
+      const q = document.getElementById('queue-tiles-slot');
+      if (q) q.innerHTML = queueTilesHtml();
     }
   });
   route();
@@ -75,6 +80,9 @@ function route() {
   window.scrollTo(0, 0);
   if (view === 'rezept') renderDetail(parts[1]);
   else if (view === 'einstellungen') renderSettings();
+  else if (view === 'hinzufuegen') renderAddChooser();
+  else if (view === 'foto') renderPhoto();
+  else if (view === 'link') renderLink();
   else if (view === 'neu') renderEdit(null);
   else if (view === 'bearbeiten') renderEdit(parts[1]);
   else renderHome();
@@ -102,6 +110,23 @@ function inboxBannerHtml() {
     <div class="queue-banner">
       ${icon('refresh')}
       <span><strong>${n} ${n === 1 ? 'Rezept wartet' : 'Rezepte warten'}</strong> auf Verarbeitung — dafür muss dein Mac an sein.</span>
+    </div>`;
+}
+
+function queueTilesHtml() {
+  if (!state.inboxJobs.length) return '';
+  const label = { instagram: 'Reel', website: 'Rezept-Seite', foto: 'Foto' };
+  return `
+    <div class="grid queue-grid">
+      ${state.inboxJobs.map((j) => `
+        <div class="tile queue-tile">
+          <div class="img-wrap">
+            <span class="queue-ic">${icon('clock')}</span>
+          </div>
+          <h3>Wird gekocht …</h3>
+          <p class="meta">${label[j.typ] || 'Rezept'} in der Warteschlange</p>
+        </div>
+      `).join('')}
     </div>`;
 }
 
@@ -164,6 +189,8 @@ function renderHome() {
 
     ${hasAny && hasFilter ? `<p class="count-line">${list.length} ${list.length === 1 ? 'Rezept' : 'Rezepte'} gefunden</p>` : ''}
 
+    <div id="queue-tiles-slot">${!hasFilter ? queueTilesHtml() : ''}</div>
+
     ${list.length ? `<div class="grid">${tilesHtml(list)}</div>` : `
       <div class="empty">
         ${icon('book')}
@@ -174,7 +201,7 @@ function renderHome() {
       </div>
     `}
 
-    <button class="fab" data-nav="neu" aria-label="Rezept hinzufügen">${icon('plus')}</button>
+    <button class="fab" data-nav="hinzufuegen" aria-label="Rezept hinzufügen">${icon('plus')}</button>
   `;
 
   const search = document.getElementById('search');
@@ -403,6 +430,173 @@ function renderSettings() {
   document.getElementById('refresh-now').addEventListener('click', async (ev) => {
     ev.currentTarget.disabled = true;
     await refresh();
+  });
+
+  bindNav();
+}
+
+// ---------- Hinzufügen: Auswahl ----------
+
+function renderAddChooser() {
+  const demo = isDemoMode();
+  app.innerHTML = `
+    <div class="placeholder-page">
+      <button class="back-link" data-nav="">${icon('back')} Zurück</button>
+      <div class="header" style="padding-top:0"><h1>Rezept hinzufügen</h1></div>
+
+      ${demo ? '<div class="demo-hint">Verbinde erst dein Archiv unter <a href="#/einstellungen">Einstellungen</a>, dann kannst du Fotos und Links sammeln.</div>' : ''}
+
+      <div class="choose-list">
+        <button class="choose-card" data-nav="foto" ${demo ? 'disabled' : ''}>
+          <span class="choose-ic">${icon('camera')}</span>
+          <span class="choose-txt">
+            <strong>Foto aufnehmen oder hochladen</strong>
+            <small>Rezept aus einem Kochbuch, einer Zeitschrift oder einem Screenshot</small>
+          </span>
+          ${icon('arrow-right', 'icon choose-arrow')}
+        </button>
+
+        <button class="choose-card" data-nav="link" ${demo ? 'disabled' : ''}>
+          <span class="choose-ic">${icon('link')}</span>
+          <span class="choose-txt">
+            <strong>Link einfügen</strong>
+            <small>Reel oder Rezept-Seite aus dem Netz</small>
+          </span>
+          ${icon('arrow-right', 'icon choose-arrow')}
+        </button>
+
+        <button class="choose-card" data-nav="neu">
+          <span class="choose-ic">${icon('pencil')}</span>
+          <span class="choose-txt">
+            <strong>Von Hand eintippen</strong>
+            <small>Zutaten und Schritte selbst eingeben</small>
+          </span>
+          ${icon('arrow-right', 'icon choose-arrow')}
+        </button>
+      </div>
+
+      ${!demo ? `
+        <p class="settings-hint" style="margin-top:20px">
+          Foto und Link kommen in deine Warteschlange. Dein Mac baut daraus die fertige Rezeptkarte, sobald er an ist.
+        </p>` : ''}
+    </div>
+  `;
+  bindNav();
+}
+
+// ---------- Hinzufügen: Foto ----------
+
+function renderPhoto() {
+  if (isDemoMode()) { location.hash = '#/hinzufuegen'; return; }
+  app.innerHTML = `
+    <div class="placeholder-page">
+      <button class="back-link" data-nav="hinzufuegen">${icon('back')} Zurück</button>
+      <div class="header" style="padding-top:0"><h1>Foto vom Rezept</h1></div>
+
+      <div class="settings-section">
+        <p class="settings-hint">Fotografier die Rezeptseite oder wähle ein Bild aus. Achte auf gutes Licht und dass die ganze Zutatenliste drauf ist.</p>
+
+        <label class="photo-drop" id="photo-drop">
+          <input id="photo-input" type="file" accept="image/*" capture="environment" hidden>
+          <span id="photo-placeholder">${icon('camera')}<br>Tippen, um Foto aufzunehmen oder auszuwählen</span>
+        </label>
+
+        <button class="btn primary" id="photo-save" disabled>Zur Sammlung hinzufügen</button>
+        <p id="photo-status" class="settings-status"></p>
+      </div>
+    </div>
+  `;
+
+  let base64 = null;
+  const input = document.getElementById('photo-input');
+  const drop = document.getElementById('photo-drop');
+  const saveBtn = document.getElementById('photo-save');
+
+  input.addEventListener('change', async () => {
+    const file = input.files[0];
+    if (!file) return;
+    const status = document.getElementById('photo-status');
+    status.textContent = 'Bild wird vorbereitet …';
+    status.className = 'settings-status';
+    try {
+      base64 = await fileToJpegBase64(file, 1600);
+      drop.innerHTML = `<img src="data:image/jpeg;base64,${base64}" alt="Vorschau">`;
+      saveBtn.disabled = false;
+      status.textContent = '';
+    } catch (e) {
+      status.textContent = 'Das Bild ließ sich nicht laden. Versuch ein anderes.';
+      status.className = 'settings-status err';
+    }
+  });
+
+  saveBtn.addEventListener('click', async () => {
+    if (!base64) return;
+    const status = document.getElementById('photo-status');
+    saveBtn.disabled = true;
+    status.textContent = 'Wird zu deiner Warteschlange hinzugefügt …';
+    status.className = 'settings-status';
+    try {
+      await addPhotoJob(base64);
+      state.inbox += 1;
+      location.hash = '#/';
+    } catch (e) {
+      saveBtn.disabled = false;
+      status.textContent = 'Hat nicht geklappt: ' + e.message + ' — bist du online?';
+      status.className = 'settings-status err';
+    }
+  });
+
+  bindNav();
+}
+
+// ---------- Hinzufügen: Link ----------
+
+function renderLink() {
+  if (isDemoMode()) { location.hash = '#/hinzufuegen'; return; }
+  app.innerHTML = `
+    <div class="placeholder-page">
+      <button class="back-link" data-nav="hinzufuegen">${icon('back')} Zurück</button>
+      <div class="header" style="padding-top:0"><h1>Link einfügen</h1></div>
+
+      <div class="settings-section">
+        <p class="settings-hint">Füg den Link zu einem Reel oder einer Rezept-Seite ein. Dein Mac holt sich das Rezept daraus.</p>
+
+        <label class="field-label" for="link-input">Link</label>
+        <input id="link-input" class="field" type="url" inputmode="url" placeholder="https://…" autocapitalize="off" autocorrect="off">
+
+        <button class="btn primary" id="link-save">Zur Sammlung hinzufügen</button>
+        <p id="link-status" class="settings-status"></p>
+      </div>
+    </div>
+  `;
+
+  const save = async () => {
+    const input = document.getElementById('link-input');
+    const status = document.getElementById('link-status');
+    const url = input.value.trim();
+    if (!/^https?:\/\/.+/i.test(url)) {
+      status.textContent = 'Bitte einen vollständigen Link einfügen (mit https://).';
+      status.className = 'settings-status err';
+      return;
+    }
+    const btn = document.getElementById('link-save');
+    btn.disabled = true;
+    status.textContent = 'Wird zu deiner Warteschlange hinzugefügt …';
+    status.className = 'settings-status';
+    try {
+      await addLinkJob(url);
+      state.inbox += 1;
+      location.hash = '#/';
+    } catch (e) {
+      btn.disabled = false;
+      status.textContent = 'Hat nicht geklappt: ' + e.message + ' — bist du online?';
+      status.className = 'settings-status err';
+    }
+  };
+
+  document.getElementById('link-save').addEventListener('click', save);
+  document.getElementById('link-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') save();
   });
 
   bindNav();

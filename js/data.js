@@ -3,7 +3,7 @@
 // GitHub-Modus: liest/schreibt das private Daten-Repo, cached offline
 // und merkt sich Änderungen in einer Warteschlange, wenn gerade kein Netz da ist.
 
-import * as gh from './github.js?v=3';
+import * as gh from './github.js?v=4';
 
 const OVERRIDES_KEY = 'rezepte_overrides';
 const CACHE_KEY = 'rezepte_cache';
@@ -226,15 +226,58 @@ export async function saveRecipe(recipe, message) {
 }
 
 // ---------- Warteschlange (Inbox) ----------
+// Ein Job ist eine kleine JSON-Datei in inbox/. Der Mac-Koch liest sie,
+// baut daraus die Rezeptkarte und löscht den Job wieder.
 
 export async function inboxCount() {
   if (isDemoMode()) return 0;
   try {
     const items = await gh.listDir('inbox');
-    return items.filter((i) => i.name !== '.gitkeep').length;
+    return items.filter((i) => i.name.endsWith('.json')).length;
   } catch {
     return 0;
   }
+}
+
+export async function listInbox() {
+  if (isDemoMode()) return [];
+  try {
+    const items = await gh.listDir('inbox');
+    const jobs = await Promise.all(
+      items.filter((i) => i.name.endsWith('.json')).map(async (i) => {
+        try {
+          return await gh.fetchJson(`inbox/${i.name}`);
+        } catch {
+          return null;
+        }
+      })
+    );
+    return jobs.filter(Boolean).sort((a, b) => (b.erstellt_am || '').localeCompare(a.erstellt_am || ''));
+  } catch {
+    return [];
+  }
+}
+
+function makeJobId() {
+  const date = new Date().toISOString().slice(0, 10);
+  const rand = Math.random().toString(36).slice(2, 8);
+  return `${date}-${rand}`;
+}
+
+export async function addLinkJob(url) {
+  const jobId = makeJobId();
+  const typ = /instagram\.com/i.test(url) ? 'instagram' : 'website';
+  const job = { job_id: jobId, typ, quelle_url: url.trim(), status: 'wartet', erstellt_am: new Date().toISOString() };
+  await gh.putFile(`inbox/${jobId}.json`, JSON.stringify(job, null, 2), `Warteschlange: ${typ}-Link`);
+  return job;
+}
+
+export async function addPhotoJob(base64Jpeg) {
+  const jobId = makeJobId();
+  await gh.putFile(`inbox/${jobId}.jpg`, base64Jpeg, `Warteschlange: Foto`, { isBase64: true });
+  const job = { job_id: jobId, typ: 'foto', bild: `inbox/${jobId}.jpg`, status: 'wartet', erstellt_am: new Date().toISOString() };
+  await gh.putFile(`inbox/${jobId}.json`, JSON.stringify(job, null, 2), `Warteschlange: Foto`);
+  return job;
 }
 
 // ---------- Tags ----------

@@ -2,14 +2,14 @@
 // Strategie: Netz zuerst, bei Fehlschlag aus dem Cache (so bleibt alles aktuell,
 // funktioniert aber auch ohne Verbindung).
 
-const VERSION = 'rezepte-shell-v3';
+const VERSION = 'rezepte-shell-v4';
 const SHELL = [
   './',
   'index.html',
-  'css/app.css?v=3',
-  'js/app.js?v=3',
-  'js/data.js?v=3',
-  'js/github.js?v=3',
+  'css/app.css?v=4',
+  'js/app.js?v=4',
+  'js/data.js?v=4',
+  'js/github.js?v=4',
   'manifest.webmanifest',
   'icons/icon-192.png',
   'icons/icon-512.png',
